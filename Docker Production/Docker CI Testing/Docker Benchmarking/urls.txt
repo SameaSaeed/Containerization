@@ -1,0 +1,3 @@
+http://test-webapp:3000/
+http://test-webapp:3000/cpu-intensive
+http://test-webapp:3000/memory

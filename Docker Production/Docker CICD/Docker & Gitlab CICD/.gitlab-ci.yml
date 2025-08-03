@@ -1,0 +1,230 @@
+stages:
+  - build
+  - test
+  - security
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  COMPOSE_PROJECT_NAME: docker-cicd-lab
+
+services:
+  - docker:24-dind
+
+before_script:
+  - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  - apk add --no-cache docker-compose
+
+build_and_tag:
+  stage: build
+  image: docker:24
+  script:
+    - echo "Building Docker image with advanced tagging..."
+    - mkdir -p scripts
+    - chmod +x scripts/tag-image.sh
+    
+    # Build base image
+    - docker build -t $IMAGE_NAME:latest .
+    
+    # Create and push multiple tags
+    - ./scripts/tag-image.sh $IMAGE_NAME $CI_COMMIT_SHORT_SHA $CI_COMMIT_REF_NAME $CI_PIPELINE_ID
+    
+    # Update VERSION file if on main branch
+    - |
+      if [ "$CI_COMMIT_REF_NAME" = "main" ]; then
+        git config --global user.email "ci@gitlab.com"
+        git config --global user.name "GitLab CI"
+        git add VERSION
+        git commit -m "Bump version [skip ci]" || echo "No version changes"
+        git push https://gitlab-ci-token:${CI_PUSH_TOKEN}@gitlab.com/$CI_PROJECT_PATH.git HEAD:$CI_COMMIT_REF_NAME || echo "Could not push version update"
+      fi
+  artifacts:
+    paths:
+      - VERSION
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+    - /^release\/.*$/
+
+test_application:
+  stage: test
+  image: docker:24
+  script:
+    - echo "Running docker-compose tests..."
+    - export APP_VERSION=$CI_COMMIT_SHORT_SHA
+    - docker-compose -f docker-compose.yml up -d app mongo redis
+    - sleep 30
+    - docker-compose exec -T app npm test
+    - docker-compose exec -T app curl -f http://localhost:3000/health || exit 1
+    - docker-compose down -v
+  dependencies:
+    - build_image
+  only:
+    - main
+    - develop
+
+security_comprehensive_scan:
+  stage: security
+  image: docker:24
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    # Install Trivy
+    - apk add --no-cache curl
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+  script:
+    - echo "Running comprehensive security scans..."
+    
+    # Scan the application image
+    - echo "Scanning application image for vulnerabilities..."
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL --format table $IMAGE_NAME:$IMAGE_TAG
+    - trivy image --exit-code 1 --severity CRITICAL --format json --output app-scan-results.json $IMAGE_NAME:$IMAGE_TAG || echo "Critical vulnerabilities found in app image"
+    
+    # Scan base images used in docker-compose
+    - echo "Scanning MongoDB image..."
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL --format table mongo:6.0
+    
+    - echo "Scanning Redis image..."
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL --format table redis:7-alpine
+    
+    - echo "Scanning Nginx image..."
+    - trivy image --exit-code 0 --severity HIGH,CRITICAL --format table nginx:alpine
+    
+    # Scan Dockerfile for misconfigurations
+    - echo "Scanning Dockerfile for security issues..."
+    - trivy config --exit-code 0 --severity HIGH,CRITICAL .
+    
+    # Generate security report
+    - echo "Generating security report..."
+    - |
+      cat > security-report.md << EOF
+      # Security Scan Report
+      
+      ## Application Image Scan
+      - Image: $IMAGE_NAME:$IMAGE_TAG
+      - Scan Date: $(date)
+      - Status: $([ -f app-scan-results.json ] && echo "Completed with findings" || echo "Clean")
+      
+      ## Base Images Status
+      - MongoDB 6.0: Scanned
+      - Redis 7 Alpine: Scanned  
+      - Nginx Alpine: Scanned
+      
+      ## Dockerfile Security Check
+      - Configuration scan completed
+      
+      For detailed results, check the pipeline logs.
+      EOF
+    
+    - cat security-report.md
+    
+  artifacts:
+    paths:
+      - app-scan-results.json
+      - security-report.md
+    expire_in: 1 week
+    reports:
+      # GitLab can parse this for security dashboard
+      container_scanning: app-scan-results.json
+  dependencies:
+    - build_and_tag
+  allow_failure: true  # Don't fail pipeline on security issues, but report them
+  only:
+    - main
+    - develop
+
+deploy_staging:
+  stage: deploy
+  image: docker:24
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - apk add --no-cache docker-compose
+  script:
+    - echo "Deploying to staging environment..."
+    
+    # Set environment variables from GitLab CI/CD variables
+    - export APP_VERSION=$(cat VERSION)
+    - export STAGING_MONGO_USERNAME=$STAGING_MONGO_USERNAME
+    - export STAGING_MONGO_PASSWORD=$STAGING_MONGO_PASSWORD
+    - export STAGING_REDIS_PASSWORD=$STAGING_REDIS_PASSWORD
+    
+    # Deploy using staging configuration
+    - docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+    
+    # Wait for services to be ready
+    - echo "Waiting for services to start..."
+    - sleep 45
+    
+    # Health check
+    - docker-compose exec -T app curl -f http://localhost:3000/health || exit 1
+    
+    # Show deployment status
+    - docker-compose ps
+    - echo "Staging deployment completed successfully!"
+    
+    # Send notification (if webhook is configured)
+    - |
+      if [ ! -z "$NOTIFICATION_WEBHOOK" ]; then
+        curl -X POST -H 'Content-type: application/json' \
+        --data '{"text":"🚀 Staging deployment successful for '"$CI_PROJECT_NAME"' version '"$(cat VERSION)"'"}' \
+        $NOTIFICATION_WEBHOOK || echo "Notification failed"
+      fi
+  environment:
+    name: staging
+    url: http://staging.example.com:3001
+  dependencies:
+    - test_application
+    - security_comprehensive_scan
+  only:
+    - main
+  when: manual  # Require manual approval for deployment
+
+deploy_production:
+  stage: deploy
+  image: docker:24
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - apk add --no-cache docker-compose
+  script:
+    - echo "Deploying to production environment..."
+    
+    # Set production environment variables
+    - export APP_VERSION=$(cat VERSION)
+    - export PROD_MONGO_USERNAME=$PROD_MONGO_USERNAME
+    - export PROD_MONGO_PASSWORD=$PROD_MONGO_PASSWORD
+    - export PROD_REDIS_PASSWORD=$PROD_REDIS_PASSWORD
+    - export PROD_DATABASE_URL=$PROD_DATABASE_URL
+    
+    # Deploy using production configuration
+    - docker-compose -f docker-compose.yml -f docker-compose.production.yml up -d
+    
+    # Extended wait for production
+    - echo "Waiting for production services to start..."
+    - sleep 60
+    
+    # Comprehensive health checks
+    - docker-compose exec -T app curl -f http://localhost:3000/health || exit 1
+    - echo "Production health check passed"
+    
+    # Show deployment status
+    - docker-compose ps
+    - echo "Production deployment completed successfully!"
+    
+    # Send success notification
+    - |
+      if [ ! -z "$NOTIFICATION_WEBHOOK" ]; then
+        curl -X POST -H 'Content-type: application/json' \
+        --data '{"text":"🎉 Production deployment successful for '"$CI_PROJECT_NAME"' version '"$(cat VERSION)"'"}' \
+        $NOTIFICATION_WEBHOOK || echo "Notification failed"
+      fi
+  environment:
+    name: production
+    url: http://production.example.com
+  dependencies:
+    - deploy_staging
+  only:
+    - main
+  when: manual  # Require manual approval for production

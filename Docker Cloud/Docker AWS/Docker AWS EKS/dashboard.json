@@ -1,0 +1,17 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          [ "ContainerInsights", "pod_cpu_utilization", "ClusterName", "$CLUSTER_NAME", "Namespace", "my-app" ],
+          [ ".", "pod_memory_utilization", ".", ".", ".", "." ]
+        ],
+        "period": 300,
+        "stat": "Average",
+        "region": "$AWS_REGION",
+        "title": "Pod Resource Utilization"
+      }
+    }
+  ]
+}

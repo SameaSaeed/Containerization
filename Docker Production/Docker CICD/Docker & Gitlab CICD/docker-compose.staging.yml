@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  app:
+    environment:
+      - NODE_ENV=staging
+      - APP_VERSION=${APP_VERSION}
+      - DATABASE_URL=mongodb://${STAGING_MONGO_USERNAME}:${STAGING_MONGO_PASSWORD}@mongo:27017/stagingdb
+      - REDIS_URL=redis://:${STAGING_REDIS_PASSWORD}@redis:6379
+    ports:
+      - "3001:3000"  # Different port for staging
+
+  mongo:
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${STAGING_MONGO_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${STAGING_MONGO_PASSWORD}
+      - MONGO_INITDB_DATABASE=stagingdb
+
+  redis:
+    command: redis-server --requirepass ${STAGING_REDIS_PASSWORD}

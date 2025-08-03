@@ -1,0 +1,73 @@
+FROM ubuntu:22.04
+
+# Metadata
+LABEL maintainer="HPC Team"
+LABEL version="1.0"
+LABEL description="Cloud-ready HPC container with MPI support"
+
+# Environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV OMPI_ALLOW_RUN_AS_ROOT=1
+ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+ENV PATH=/opt/hpc/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/hpc/lib:$LD_LIBRARY_PATH
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gfortran \
+    openmpi-bin \
+    openmpi-common \
+    libopenmpi-dev \
+    python3 \
+    python3-pip \
+    python3-dev \
+    openssh-server \
+    openssh-client \
+    curl \
+    wget \
+    git \
+    htop \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip3 install --no-cache-dir \
+    numpy \
+    scipy \
+    mpi4py \
+    matplotlib \
+    pandas \
+    scikit-learn
+
+# Create application directory
+RUN mkdir -p /opt/hpc/{bin,lib,share,apps}
+WORKDIR /opt/hpc/apps
+
+# Configure SSH for passwordless access
+RUN mkdir -p /root/.ssh && \
+    ssh-keygen -t rsa -f /root/.ssh/id_rsa -N '' && \
+    cat /root/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys && \
+    chmod 600 /root/.ssh/authorized_keys && \
+    echo "StrictHostKeyChecking no" >> /root/.ssh/config
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+service ssh start\n\
+if [ "$1" = "master" ]; then\n\
+    echo "Starting as MPI master node"\n\
+    exec tail -f /dev/null\n\
+elif [ "$1" = "worker" ]; then\n\
+    echo "Starting as MPI worker node"\n\
+    exec tail -f /dev/null\n\
+else\n\
+    exec "$@"\n\
+fi' > /opt/hpc/bin/start-hpc.sh && \
+    chmod +x /opt/hpc/bin/start-hpc.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD pgrep sshd > /dev/null || exit 1
+
+ENTRYPOINT ["/opt/hpc/bin/start-hpc.sh"]
+CMD ["master"]

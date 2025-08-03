@@ -1,0 +1,142 @@
+# Advanced GitLab CI/CD Pipeline with Comprehensive Testing
+image: docker:24.0.5
+
+stages:
+  - build
+  - test
+  - security
+  - push
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_IMAGE_NAME: docker-cicd-demo
+
+services:
+  - docker:24.0.5-dind
+
+before_script:
+  - docker --version
+  - docker info
+
+# Build stage
+build_application:
+  stage: build
+  script:
+    - echo "🏗️ Building application images..."
+    - docker build -t $DOCKER_IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker build -t $DOCKER_IMAGE_NAME:latest .
+    - docker build -f Dockerfile.test -t $DOCKER_IMAGE_NAME:test .
+    - docker images
+    - echo "✅ Build completed"
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# Unit tests in container
+unit_tests:
+  stage: test
+  script:
+    - echo "🧪 Running unit tests in container..."
+    - docker run --rm $DOCKER_IMAGE_NAME:test
+    - echo "✅ Unit tests passed"
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# Integration tests
+integration_tests:
+  stage: test
+  script:
+    - echo "🔗 Running integration tests..."
+    - docker run -d --name integration-test -p 3000:3000 $DOCKER_IMAGE_NAME:latest
+    - sleep 20
+    - echo "Testing application endpoints..."
+    - docker exec integration-test curl -f http://localhost:3000/health
+    - docker exec integration-test curl -f http://localhost:3000/
+    - echo "Running comprehensive test suite..."
+    - docker exec integration-test npm test
+    - docker stop integration-test
+    - docker rm integration-test
+    - echo "✅ Integration tests passed"
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# Container security scan (basic)
+security_scan:
+  stage: security
+  script:
+    - echo "🔒 Running basic security checks..."
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock 
+      -v $(pwd):/tmp alpine:latest sh -c "
+      echo 'Checking for common security issues...'
+      echo 'Verifying non-root user in container...'
+      docker inspect $DOCKER_IMAGE_NAME:latest | grep -i user || echo 'Warning: Running as root'
+      echo 'Security scan completed'
+      "
+    - echo "✅ Security checks completed"
+  only:
+    - main
+    - develop
+  allow_failure: true
+
+# Performance test
+performance_test:
+  stage: test
+  script:
+    - echo "⚡ Running performance tests..."
+    - docker run -d --name perf-test -p 3000:3000 $DOCKER_IMAGE_NAME:latest
+    - sleep 15
+    - echo "Testing application response time..."
+    - docker exec perf-test sh -c "
+      for i in \$(seq 1 10); do
+        time curl -s http://localhost:3000/ > /dev/null
+      done
+      "
+    - docker stop perf-test
+    - docker rm perf-test
+    - echo "✅ Performance tests completed"
+  only:
+    - main
+    - develop
+  allow_failure: true
+
+# Push to Docker Hub
+push_to_registry:
+  stage: push
+  script:
+    - echo "📦 Pushing to Docker Hub..."
+    - echo $DOCKER_HUB_PASSWORD | docker login -u $DOCKER_HUB_USERNAME --password-stdin
+    - docker build -t $DOCKER_HUB_USERNAME/$DOCKER_IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker build -t $DOCKER_HUB_USERNAME/$DOCKER_IMAGE_NAME:latest .
+    - docker push $DOCKER_HUB_USERNAME/$DOCKER_IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - docker push $DOCKER_HUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+    - docker logout
+    - echo "✅ Images pushed successfully"
+  only:
+    - main
+
+# Deploy application
+deploy_production:
+  stage: deploy
+  script:
+    - echo "🚀 Deploying to production..."
+    - docker pull $DOCKER_HUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+    - docker stop $DOCKER_IMAGE_NAME || true
+    - docker rm $DOCKER_IMAGE_NAME || true
+    - docker run -d --name $DOCKER_IMAGE_NAME -p 8080:3000 --restart unless-stopped $DOCKER_HUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+    - sleep 10
+    - echo "Verifying deployment..."
+    - docker exec $DOCKER_IMAGE_NAME curl -f http://localhost:3000/health
+    - echo "✅ Deployment successful - Application running on port 8080"
+  only:
+    - main
+  when: manual
+  environment:
+    name: production
+    url: http://localhost:8080

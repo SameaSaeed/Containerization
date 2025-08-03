@@ -1,0 +1,43 @@
+# Use specific version tag instead of 'latest'
+FROM node:18.17.0-alpine3.18
+
+# Install security updates
+RUN apk update && \
+    apk upgrade && \
+    apk add --no-cache dumb-init && \
+    rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -S appuser -u 1001 -G appgroup
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files with proper ownership
+COPY --chown=appuser:appgroup package*.json ./
+
+# Install dependencies
+RUN npm install --only=production && \
+    npm cache clean --force && \
+    rm -rf /tmp/*
+
+# Copy application code with proper ownership
+COPY --chown=appuser:appgroup . .
+
+# Remove unnecessary files and set permissions
+RUN rm -rf .git .gitignore README.md && \
+    chmod -R 755 /app && \
+    chmod 644 /app/package.json /app/app.js
+
+# Switch to non-root user
+USER appuser
+
+# Use non-root port
+EXPOSE 3000
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Run application
+CMD ["node", "app.js"]

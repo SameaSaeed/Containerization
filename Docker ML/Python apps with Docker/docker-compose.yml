@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  database:
+    image: postgres:13
+    container_name: flask-postgres-db
+    environment:
+      POSTGRES_DB: flaskapp
+      POSTGRES_USER: flaskuser
+      POSTGRES_PASSWORD: flaskpass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - flask-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flaskuser -d flaskapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flask Web Application Service
+  web:
+    build: 
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: flask-web-app
+    environment:
+      DB_HOST: database
+      DB_NAME: flaskapp
+      DB_USER: flaskuser
+      DB_PASSWORD: flaskpass
+      DB_PORT: 5432
+    ports:
+      - "8080:5000"
+    volumes:
+      - ./app:/app
+      - app_data:/app/data
+    networks:
+      - flask-network
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Redis Cache Service (optional enhancement)
+  cache:
+    image: redis:7-alpine
+    container_name: flask-redis-cache
+    ports:
+      - "6379:6379"
+    networks:
+      - flask-network
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # Nginx Reverse Proxy (optional enhancement)
+  nginx:
+    image: nginx:alpine
+    container_name: flask-nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - flask-network
+    depends_on:
+      - web
+
+# Define named volumes
+volumes:
+  postgres_data:
+    driver: local
+  app_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# Define networks
+networks:
+  flask-network:
+    driver: bridge

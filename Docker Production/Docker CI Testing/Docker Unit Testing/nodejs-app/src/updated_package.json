@@ -1,0 +1,26 @@
+{
+  "name": "nodejs-ci-app",
+  "version": "1.0.0",
+  "description": "Node.js application for CI testing with Docker",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "test": "jest --verbose",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --testResultsProcessor=jest-junit"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "jest-junit": "^16.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
+  }
+}

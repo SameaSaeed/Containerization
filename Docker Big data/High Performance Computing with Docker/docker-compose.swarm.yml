@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  hpc-service:
+    image: mpi-cluster:latest
+    deploy:
+      replicas: 4
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - hpc-overlay
+    volumes:
+      - hpc-shared:/shared
+    environment:
+      - OMPI_ALLOW_RUN_AS_ROOT=1
+      - OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+    command: >
+      bash -c "
+      service ssh start &&
+      echo 'HPC Node Ready' &&
+      tail -f /dev/null
+      "
+
+networks:
+  hpc-overlay:
+    driver: overlay
+    attachable: true
+
+volumes:
+  hpc-shared:
+    driver: local

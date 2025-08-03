@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Docker Lab - Visitor Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .visitors-list {
+            margin-top: 30px;
+        }
+        .visitor-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐳 Python Docker Lab - Visitor Tracker</h1>
+        <p>Welcome to our containerized Python application! Add your name to the visitor list.</p>
+        
+        <div class="form-group">
+            <form id="visitorForm">
+                <input type="text" id="visitorName" placeholder="Enter your name" required>
+                <button type="submit">Add Visitor</button>
+            </form>
+        </div>
+        
+        <div id="message"></div>
+        
+        <div class="visitors-list">
+            <h3>Recent Visitors:</h3>
+            {% if visitors %}
+                {% for visitor in visitors %}
+                <div class="visitor-item">
+                    <strong>{{ visitor[0] }}</strong> - {{ visitor[1] }}
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No visitors yet. Be the first!</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('visitorForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('visitorName').value;
+            const formData = new FormData();
+            formData.append('name', name);
+            
+            fetch('/add_visitor', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const messageDiv = document.getElementById('message');
+                messageDiv.innerHTML = `<div class="message success">${data.message}</div>`;
+                
+                if (data.status === 'success') {
+                    document.getElementById('visitorName').value = '';
+                    // Reload page after 1 second to show updated visitor list
+                    setTimeout(() => location.reload(), 1000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>

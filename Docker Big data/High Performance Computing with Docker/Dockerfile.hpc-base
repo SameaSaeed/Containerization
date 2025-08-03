@@ -1,0 +1,33 @@
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV OMPI_ALLOW_RUN_AS_ROOT=1
+ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+
+# Install essential packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gfortran \
+    openmpi-bin \
+    openmpi-common \
+    libopenmpi-dev \
+    python3 \
+    python3-pip \
+    python3-numpy \
+    python3-scipy \
+    python3-mpi4py \
+    htop \
+    vim \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a working directory
+WORKDIR /hpc
+
+# Copy application files (will be added later)
+COPY . /hpc/
+
+# Set default command
+CMD ["/bin/bash"]

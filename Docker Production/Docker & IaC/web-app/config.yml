@@ -1,0 +1,23 @@
+application:
+  name: "docker-iac-demo"
+  version: "1.0.0"
+  environment: "production"
+  
+containers:
+  web:
+    image: "docker-iac-web"
+    replicas: 2
+    port: 5000
+  
+  database:
+    image: "postgres:13"
+    replicas: 1
+    port: 5432
+    
+network:
+  name: "iac-network"
+  driver: "bridge"
+
+volumes:
+  database:
+    name: "postgres-data"

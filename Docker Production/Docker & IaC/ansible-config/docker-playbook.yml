@@ -1,0 +1,71 @@
+---
+- name: Deploy Docker Infrastructure with Ansible
+  hosts: local
+  become: yes
+  vars:
+    app_name: "ansible-docker-iac"
+    environment: "ansible-managed"
+    web_replicas: 3
+    
+  tasks:
+    - name: Ensure Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create custom Docker network
+      docker_network:
+        name: "{{ app_name }}-network"
+        driver: bridge
+        state: present
+
+    - name: Create Docker volume for database
+      docker_volume:
+        name: "{{ app_name }}-postgres-data"
+        state: present
+
+    - name: Deploy PostgreSQL database
+      docker_container:
+        name: "{{ app_name }}-postgres"
+        image: postgres:13
+        state: started
+        restart_policy: unless-stopped
+        env:
+          POSTGRES_DB: "ansibledb"
+          POSTGRES_USER: "postgres"
+          POSTGRES_PASSWORD: "ansible123"
+        volumes:
+          - "{{ app_name }}-postgres-data:/var/lib/postgresql/data"
+        networks:
+          - name: "{{ app_name }}-network"
+        published_ports:
+          - "5434:5432"
+
+    - name: Deploy web application containers
+      docker_container:
+        name: "{{ app_name }}-web-{{ item }}"
+        image: "docker-iac-web:latest"
+        state: started
+        restart_policy: unless-stopped
+        env:
+          ENVIRONMENT: "{{ environment }}"
+          DATABASE_URL: "postgresql://postgres:ansible123@{{ app_name }}-postgres:5432/ansibledb"
+        networks:
+          - name: "{{ app_name }}-network"
+        published_ports:
+          - "{{ 6000 + item }}:5000"
+      loop: "{{ range(1, web_replicas + 1) | list }}"
+
+    - name: Deploy Nginx load balancer
+      docker_container:
+        name: "{{ app_name }}-nginx"
+        image: nginx:alpine
+        state: started
+        restart_policy: unless-stopped
+        networks:
+          - name: "{{ app_name }}-network"
+        published_ports:
+          - "8080:80"
+        volumes:
+          - "{{ playbook_dir }}/nginx-ansible.conf:/etc/nginx/nginx.conf:ro"

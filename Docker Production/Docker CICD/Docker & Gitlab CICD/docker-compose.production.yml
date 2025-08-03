@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    environment:
+      - NODE_ENV=production
+      - APP_VERSION=${APP_VERSION}
+      - DATABASE_URL=${PROD_DATABASE_URL}
+      - REDIS_URL=redis://:${PROD_REDIS_PASSWORD}@redis:6379
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  mongo:
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${PROD_MONGO_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${PROD_MONGO_PASSWORD}
+      - MONGO_INITDB_DATABASE=proddb
+    volumes:
+      - prod-mongo-data:/data/db
+
+  redis:
+    command: redis-server --requirepass ${PROD_REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - prod-redis-data:/data
+
+volumes:
+  prod-mongo-data:
+  prod-redis-data:

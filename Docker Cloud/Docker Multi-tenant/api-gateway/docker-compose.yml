@@ -1,0 +1,28 @@
+# API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway-compose
+    networks:
+      - tenant-a-network
+      - tenant-b-network
+      - tenant-c-network
+      - shared-services-network
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=your-secret-key-change-in-production
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+    restart: unless-stopped
+    depends_on:
+      - tenant-a
+      - tenant-b
+      - tenant-c
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

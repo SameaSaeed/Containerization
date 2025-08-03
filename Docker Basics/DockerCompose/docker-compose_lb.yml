@@ -1,0 +1,13 @@
+# Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: complex-app-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - web
+    networks:
+      - app-network
+    restart: unless-stopped

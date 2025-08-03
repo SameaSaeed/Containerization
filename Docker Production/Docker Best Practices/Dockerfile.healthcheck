@@ -1,0 +1,37 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install wget for health checks
+RUN apk add --no-cache wget
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy application and health check script
+COPY server.js ./
+COPY health-check.sh ./
+
+# Make health check script executable
+RUN chmod +x health-check.sh
+
+# Change ownership
+RUN chown -R nodejs:nodejs /app
+
+USER nodejs
+
+EXPOSE 3000
+
+# Advanced health check with custom script
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=5 \
+  CMD ./health-check.sh
+
+CMD ["npm", "start"]

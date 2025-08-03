@@ -1,0 +1,138 @@
+name: Performance Testing CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run performance tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  performance-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build test application
+      run: |
+        docker build -f Dockerfile.webapp -t test-webapp:ci .
+        docker build -f Dockerfile.ab -t apache-bench:ci .
+        docker build -f Dockerfile.siege -t siege-bench:ci .
+    
+    - name: Create Docker network
+      run: docker network create ci-perf-network
+    
+    - name: Start test application
+      run: |
+        docker run -d \
+          --name test-webapp-ci \
+          --network ci-perf-network \
+          -p 3000:3000 \
+          test-webapp:ci
+        
+        # Wait for application to be ready
+        sleep 10
+        
+        # Health check
+        curl --retry 5 --retry-delay 2 http://localhost:3000/
+    
+    - name: Run performance tests
+      run: |
+        # Create results directory
+        mkdir -p ci-results
+        
+        # Basic load test
+        docker run --rm \
+          --network ci-perf-network \
+          apache-bench:ci \
+          ab -n 1000 -c 10 http://test-webapp-ci:3000/ > ci-results/basic-load-test.txt
+        
+        # High concurrency test
+        docker run --rm \
+          --network ci-perf-network \
+          apache-bench:ci \
+          ab -n 2000 -c 50 http://test-webapp-ci:3000/ > ci-results/high-concurrency-test.txt
+        
+        # Siege test
+        docker run --rm \
+          --network ci-perf-network \
+          siege-bench:ci \
+          siege -c 20 -t 30s http://test-webapp-ci:3000/ > ci-results/siege-test.txt
+    
+    - name: Analyze performance results
+      run: |
+        # Extract key metrics
+        echo "=== Performance Test Results ===" > ci-results/summary.txt
+        echo "Timestamp: $(date)" >> ci-results/summary.txt
+        echo "" >> ci-results/summary.txt
+        
+        # Basic load test metrics
+        echo "Basic Load Test:" >> ci-results/summary.txt
+        grep "Requests per second" ci-results/basic-load-test.txt >> ci-results/summary.txt
+        grep "Time per request" ci-results/basic-load-test.txt | head -n1 >> ci-results/summary.txt
+        grep "Failed requests" ci-results/basic-load-test.txt >> ci-results/summary.txt
+        echo "" >> ci-results/summary.txt
+        
+        # High concurrency test metrics
+        echo "High Concurrency Test:" >> ci-results/summary.txt
+        grep "Requests per second" ci-results/high-concurrency-test.txt >> ci-results/summary.txt
+        grep "Failed requests" ci-results/high-concurrency-test.txt >> ci-results/summary.txt
+        echo "" >> ci-results/summary.txt
+        
+        # Siege test metrics
+        echo "Siege Test:" >> ci-results/summary.txt
+        grep "Transaction rate" ci-results/siege-test.txt >> ci-results/summary.txt
+        grep "Availability" ci-results/siege-test.txt >> ci-results/summary.txt
+        echo "" >> ci-results/summary.txt
+        
+        # Display summary
+        cat ci-results/summary.txt
+    
+    - name: Performance regression check
+      run: |
+        # Simple performance regression check
+        # Extract requests per second from basic load test
+        RPS=$(grep "Requests per second" ci-results/basic-load-test.txt | awk '{print $4}')
+        FAILED_REQUESTS=$(grep "Failed requests" ci-results/basic-load-test.txt | awk '{print $3}')
+        
+        echo "Current RPS: $RPS"
+        echo "Failed Requests: $FAILED_REQUESTS"
+        
+        # Set performance thresholds
+        MIN_RPS=50
+        MAX_FAILED_REQUESTS=0
+        
+        # Check if performance meets minimum requirements
+        if (( $(echo "$RPS < $MIN_RPS" | bc -l) )); then
+          echo "❌ Performance regression detected: RPS ($RPS) below threshold ($MIN_RPS)"
+          exit 1
+        fi
+        
+        if [ "$FAILED_REQUESTS" -gt "$MAX_FAILED_REQUESTS" ]; then
+          echo "❌ Reliability issue detected: $FAILED_REQUESTS failed requests"
+          exit 1
+        fi
+        
+        echo "✅ Performance tests passed!"
+    
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-test-results
+        path: ci-results/
+        retention-days: 30
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        docker stop test-webapp-ci || true
+        docker rm test-webapp-ci || true
+        docker network rm ci-perf-network || true

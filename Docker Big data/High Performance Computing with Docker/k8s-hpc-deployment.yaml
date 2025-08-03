@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpc-master
+  labels:
+    app: hpc-cluster
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hpc-cluster
+      role: master
+  template:
+    metadata:
+      labels:
+        app: hpc-cluster
+        role: master
+    spec:
+      containers:
+      - name: hpc-master
+        image: cloud-hpc:latest
+        args: ["master"]
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        ports:
+        - containerPort: 22
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /shared
+      volumes:
+      - name: shared-storage
+        emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpc-workers
+  labels:
+    app: hpc-cluster
+    role: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hpc-cluster
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: hpc-cluster
+        role: worker
+    spec:
+      containers:
+      - name: hpc-worker
+        image: cloud-hpc:latest
+        args: ["worker"]
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        ports:
+        - containerPort: 22
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /shared
+      volumes:
+      - name: shared-storage
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hpc-master-service
+spec:
+  selector:
+    app: hpc-cluster
+    role: master
+  ports:
+  - port: 22
+    targetPort: 22
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hpc-workers-service
+spec:
+  selector:
+    app: hpc-cluster
+    role: worker
+  ports:
+  - port: 22
+    targetPort: 22
+  type: ClusterIP

@@ -1,0 +1,6 @@
+# Ignore specific CVEs that are false positives or accepted risks
+# CVE-2023-12345
+# CVE-2023-67890
+
+# Ignore low severity issues in development
+# GHSA-*

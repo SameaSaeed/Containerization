@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aks-demo-app
+  labels:
+    app: aks-demo-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aks-demo-app
+  template:
+    metadata:
+      labels:
+        app: aks-demo-app
+    spec:
+      containers:
+      - name: aks-demo-app
+        image: ${ACR_LOGIN_SERVER}/aks-demo-app:v1
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5

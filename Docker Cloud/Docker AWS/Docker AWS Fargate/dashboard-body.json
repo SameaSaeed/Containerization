@@ -1,0 +1,38 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          [ "AWS/ECS", "CPUUtilization", "ServiceName", "fargate-demo-service", "ClusterName", "fargate-lab-cluster" ],
+          [ ".", "MemoryUtilization", ".", ".", ".", "." ]
+        ],
+        "period": 300,
+        "stat": "Average",
+        "region": "us-east-1",
+        "title": "ECS Service Metrics"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "metrics": [
+          [ "AWS/ApplicationELB", "RequestCount", "LoadBalancer", "${ALB_ARN##*/}" ],
+          [ ".", "TargetResponseTime", ".", "." ]
+        ],
+        "period": 300,
+        "stat": "Sum",
+        "region": "us-east-1",
+        "title": "Load Balancer Metrics"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+deployment:
+  strategy: blue-green
+  health_check:
+    timeout: 30
+    retries: 3
+    interval: 2
+  rollback:
+    enabled: true
+    automatic: true
+  environments:
+    blue:
+      port: 3001
+      weight: 100
+    green:
+      port: 3002
+      weight: 0

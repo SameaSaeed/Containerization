@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ml-postgres
+    environment:
+      POSTGRES_DB: ml_predictions
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - ml-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ML Flask Application - Instance 1
+  ml-app-1:
+    build: .
+    container_name: ml-app-1
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ml_predictions
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./app/app_with_db.py:/app/app.py
+    ports:
+      - "5001:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ml-network
+    restart: unless-stopped
+
+  # ML Flask Application - Instance 2
+  ml-app-2:
+    build: .
+    container_name: ml-app-2
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ml_predictions
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./app/app_with_db.py:/app/app.py
+    ports:
+      - "5002:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ml-network
+    restart: unless-stopped
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: ml-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - ml-app-1
+      - ml-app-2
+    networks:
+      - ml-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  ml-network:
+    driver: bridge

@@ -1,0 +1,8 @@
+FROM alpine:latest
+
+RUN apk add --no-cache curl python3 docker-cli bash
+
+COPY monitor-builds.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/monitor-builds.sh
+
+CMD ["/usr/local/bin/monitor-builds.sh"]

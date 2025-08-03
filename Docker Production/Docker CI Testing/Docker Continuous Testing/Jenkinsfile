@@ -1,0 +1,109 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_COMPOSE_FILE = 'docker-compose.yml'
+        TEST_REPORTS_DIR = 'reports'
+        SCREENSHOTS_DIR = 'screenshots'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+            }
+        }
+        
+        stage('Setup Test Environment') {
+            steps {
+                echo 'Setting up Selenium Grid...'
+                script {
+                    // Clean up any existing containers
+                    sh 'docker-compose -f ${DOCKER_COMPOSE_FILE} down || true'
+                    
+                    // Start Selenium Grid
+                    sh 'docker-compose -f ${DOCKER_COMPOSE_FILE} up -d selenium-hub chrome-node'
+                    
+                    // Wait for services to be ready
+                    sh 'sleep 30'
+                    
+                    // Verify Selenium Hub is running
+                    sh 'curl -f http://localhost:4444/wd/hub/status || exit 1'
+                }
+            }
+        }
+        
+        stage('Run Selenium Tests') {
+            steps {
+                echo 'Running Selenium tests...'
+                script {
+                    try {
+                        // Run tests using docker-compose
+                        sh '''
+                            docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm test-runner \
+                            pytest tests/ -v \
+                            --html=reports/jenkins_test_report.html \
+                            --self-contained-html \
+                            --junitxml=reports/junit_results.xml
+                        '''
+                    } catch (Exception e) {
+                        echo "Tests failed: ${e.getMessage()}"
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+        }
+        
+        stage('Collect Test Results') {
+            steps {
+                echo 'Collecting test results and artifacts...'
+                
+                // Archive test reports
+                archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'screenshots/**/*', allowEmptyArchive: true
+                
+                // Publish JUnit test results
+                publishTestResults testResultsPattern: 'reports/junit_results.xml'
+                
+                // Publish HTML reports
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'reports',
+                    reportFiles: 'jenkins_test_report.html',
+                    reportName: 'Selenium Test Report'
+                ])
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up test environment...'
+            script {
+                // Stop and remove containers
+                sh 'docker-compose -f ${DOCKER_COMPOSE_FILE} down || true'
+                
+                // Clean up dangling images
+                sh 'docker image prune -f || true'
+            }
+        }
+        
+        success {
+            echo 'All tests passed successfully!'
+            // You can add notifications here (email, Slack, etc.)
+        }
+        
+        failure {
+            echo 'Tests failed! Check the reports for details.'
+            // You can add failure notifications here
+        }
+        
+        unstable {
+            echo 'Some tests failed, but build completed.'
+            // You can add unstable build notifications here
+        }
+    }
+}

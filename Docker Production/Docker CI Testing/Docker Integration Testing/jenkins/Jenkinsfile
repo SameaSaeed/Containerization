@@ -1,0 +1,146 @@
+pipeline {
+    agent any
+    
+    environment {
+        COMPOSE_PROJECT_NAME = "docker-ci-${BUILD_NUMBER}"
+        DOCKER_BUILDKIT = "1"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+            }
+        }
+        
+        stage('Build Images') {
+            steps {
+                echo 'Building Docker images...'
+                script {
+                    sh '''
+                        docker-compose -f docker-compose.test.yml build --no-cache
+                    '''
+                }
+            }
+        }
+        
+        stage('Start Services') {
+            steps {
+                echo 'Starting application services...'
+                script {
+                    sh '''
+                        docker-compose -f docker-compose.test.yml up -d postgres app
+                        
+                        # Wait for services to be healthy
+                        echo "Waiting for services to be ready..."
+                        timeout 120 sh -c 'until docker-compose -f docker-compose.test.yml exec -T postgres pg_isready -U testuser -d testdb; do sleep 2; done'
+                        timeout 120 sh -c 'until docker-compose -f docker-compose.test.yml exec -T app curl -f http://localhost:3000/health; do sleep 2; done'
+                        
+                        echo "Services are ready!"
+                    '''
+                }
+            }
+        }
+        
+        stage('Run Integration Tests') {
+            steps {
+                echo 'Running integration tests...'
+                script {
+                    sh '''
+                        # Create test results directory
+                        mkdir -p test-results
+                        
+                        # Run tests and capture results
+                        docker-compose -f docker-compose.test.yml run --rm tests npm test -- --ci --reporters=default --reporters=jest-junit --outputFile=test-results/junit.xml || true
+                        
+                        # Copy test results from container
+                        docker-compose -f docker-compose.test.yml run --rm -v $(pwd)/test-results:/host-results tests sh -c "cp -r /tests/test-results/* /host-results/ 2>/dev/null || true"
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Publish test results
+                    publishTestResults testResultsPattern: 'test-results/*.xml'
+                    
+                    // Archive test artifacts
+                    archiveArtifacts artifacts: 'test-results/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Health Check') {
+            steps {
+                echo 'Performing final health checks...'
+                script {
+                    sh '''
+                        # Test application endpoints
+                        docker-compose -f docker-compose.test.yml exec -T app curl -f http://localhost:3000/health
+                        docker-compose -f docker-compose.test.yml exec -T app curl -f http://localhost:3000/db-status
+                        docker-compose -f docker-compose.test.yml exec -T app curl -f http://localhost:3000/users
+                    '''
+                }
+            }
+        }
+        
+        stage('Generate Reports') {
+            steps {
+                echo 'Generating test reports...'
+                script {
+                    sh '''
+                        # Generate container logs
+                        mkdir -p logs
+                        docker-compose -f docker-compose.test.yml logs app > logs/app.log
+                        docker-compose -f docker-compose.test.yml logs postgres > logs/postgres.log
+                        docker-compose -f docker-compose.test.yml logs tests > logs/tests.log
+                        
+                        # Generate system information
+                        echo "=== Docker Images ===" > logs/system-info.log
+                        docker images >> logs/system-info.log
+                        echo "=== Docker Containers ===" >> logs/system-info.log
+                        docker-compose -f docker-compose.test.yml ps >> logs/system-info.log
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'logs/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up...'
+            script {
+                sh '''
+                    # Stop and remove containers
+                    docker-compose -f docker-compose.test.yml down -v --remove-orphans
+                    
+                    # Clean up dangling images
+                    docker image prune -f
+                '''
+            }
+        }
+        
+        success {
+            echo 'Pipeline completed successfully!'
+            emailext (
+                subject: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: "Good news! The integration tests passed successfully.",
+                to: "${env.CHANGE_AUTHOR_EMAIL}"
+            )
+        }
+        
+        failure {
+            echo 'Pipeline failed!'
+            emailext (
+                subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: "The integration tests failed. Please check the logs for details.",
+                to: "${env.CHANGE_AUTHOR_EMAIL}"
+            )
+        }
+    }
+}

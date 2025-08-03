@@ -1,0 +1,16 @@
+# Job Manager Memory Configuration
+jobmanager.memory.process.size: 1024m
+jobmanager.memory.flink.size: 768m
+
+# Task Manager Memory Configuration
+taskmanager.memory.process.size: 2048m
+taskmanager.memory.flink.size: 1536m
+taskmanager.memory.managed.fraction: 0.4
+
+# Network Configuration
+taskmanager.network.memory.fraction: 0.1
+taskmanager.network.memory.min: 64mb
+taskmanager.network.memory.max: 1gb
+
+# Parallelism Configuration
+parallelism.default: 4

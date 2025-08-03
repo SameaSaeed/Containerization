@@ -1,0 +1,19 @@
+# Use officially specific base image
+FROM node:18-alpine 
+
+WORKDIR /app
+
+# Copy package files first (these change less frequently)
+COPY package*.json ./
+
+# Use fewer layers
+# Install dependencies (this layer will be cached if package.json doesn't change)
+RUN npm install --only=production && \
+    npm cache clean --force
+
+# Copy application code last (these change more frequently)
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

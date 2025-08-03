@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: backend-api
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3001
+      - SERVICE_NAME=backend-api
+      - FRONTEND_URL=http://frontend:80
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build: ./frontend
+    container_name: frontend-web
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    environment:
+      - BACKEND_API_URL=http://backend:3001
+      - SERVICE_NAME=frontend-web
+    depends_on:
+      - backend
+    networks:
+      - microservices-net
+
+networks:
+  microservices-net:
+    external: true

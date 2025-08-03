@@ -1,0 +1,17 @@
+{
+    "name": "order-service",
+    "version": "1.0.0",
+    "description": "Order management microservice",
+    "main": "app.js",
+    "scripts": {
+        "start": "node app.js",
+        "dev": "nodemon app.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "axios": "^1.6.0"
+    },
+    "keywords": ["microservice", "order", "docker"],
+    "author": "Lab Student",
+    "license": "MIT"
+}

@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # Web application
+  webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    ports:
+      - "3000:3000"
+    networks:
+      - perf-test
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # Load balancer (nginx)
+  loadbalancer:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - webapp
+      - webapp-replica1
+      - webapp-replica2
+    networks:
+      - perf-test
+
+  # Web application replicas
+  webapp-replica1:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    networks:
+      - perf-test
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  webapp-replica2:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    networks:
+      - perf-test
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # Distributed load generators
+  loadgen1:
+    build:
+      context: .
+      dockerfile: Dockerfile.ab
+    networks:
+      - perf-test
+    volumes:
+      - ./distributed-results:/results
+    command: sleep infinity
+
+  loadgen2:
+    build:
+      context: .
+      dockerfile: Dockerfile.siege
+    networks:
+      - perf-test
+    volumes:
+      - ./distributed-results:/results
+    command: sleep infinity
+
+  loadgen3:
+    build:
+      context: .
+      dockerfile: Dockerfile.ab
+    networks:
+      - perf-test
+    volumes:
+      - ./distributed-results:/results
+    command: sleep infinity
+
+networks:
+  perf-test:
+    driver: bridge
+
+volumes:
+  distributed-results:

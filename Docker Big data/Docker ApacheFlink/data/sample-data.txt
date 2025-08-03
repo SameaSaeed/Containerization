@@ -1,0 +1,10 @@
+user1,login,2024-01-15T10:00:00
+user2,purchase,2024-01-15T10:01:00
+user3,logout,2024-01-15T10:02:00
+user1,purchase,2024-01-15T10:03:00
+user4,login,2024-01-15T10:04:00
+user2,logout,2024-01-15T10:05:00
+user5,login,2024-01-15T10:06:00
+user3,purchase,2024-01-15T10:07:00
+user1,logout,2024-01-15T10:08:00
+user4,purchase,2024-01-15T10:09:00

@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_COMPOSE_FILE = 'docker-compose.yml'
+        TEST_RESULTS_DIR = 'test-results'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                // In a real scenario, this would checkout from Git
+                sh 'echo "Source code checked out"'
+            }
+        }
+        
+        stage('Build Images') {
+            steps {
+                echo 'Building Docker images...'
+                sh 'docker-compose build'
+            }
+        }
+        
+        stage('Run Tests') {
+            parallel {
+                stage('Python Tests') {
+                    steps {
+                        echo 'Running Python tests...'
+                        sh 'docker-compose run --rm python-tests'
+                    }
+                }
+                stage('Node.js Tests') {
+                    steps {
+                        echo 'Running Node.js tests...'
+                        sh 'docker-compose run --rm nodejs-tests'
+                    }
+                }
+            }
+        }
+        
+        stage('Collect Test Results') {
+            steps {
+                echo 'Collecting test results...'
+                sh 'ls -la test-results/ || echo "No test results found"'
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Deploying to staging environment...'
+                sh 'docker-compose up -d python-app nodejs-app'
+                
+                // Health checks
+                sh '''
+                    echo "Waiting for applications to start..."
+                    sleep 10
+                    
+                    echo "Testing Python app health..."
+                    curl -f http://localhost:5000/health || exit 1
+                    
+                    echo "Testing Node.js app health..."
+                    curl -f http://localhost:3000/health || exit 1
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up...'
+            sh 'docker-compose down || true'
+            sh 'docker system prune -f || true'
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs for details.'
+        }
+    }
+}

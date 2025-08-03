@@ -1,0 +1,2 @@
+# No additional requirements needed for this basic example
+# The AWS Lambda Python runtime includes standard libraries

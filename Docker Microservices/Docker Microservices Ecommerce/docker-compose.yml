@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # User Service
+  user-service:
+    build:
+      context: ../user-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    ports:
+      - "3001:3001"
+    networks:
+      - microservices-network
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "service.name=user-service"
+      - "service.version=1.0.0"
+
+  # Product Service
+  product-service:
+    build:
+      context: ../product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    ports:
+      - "3002:3002"
+    networks:
+      - microservices-network
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "service.name=product-service"
+      - "service.version=1.0.0"
+
+  # Order Service
+  order-service:
+    build:
+      context: ../order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    ports:
+      - "3003:3003"
+    networks:
+      - microservices-network
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - USER_SERVICE_URL=http://user-service:3001
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+    depends_on:
+      - user-service
+      - product-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "service.name=order-service"
+      - "service.version=1.0.0"
+
+networks:
+  microservices-network:
+    driver: bridge
+    name: microservices-network

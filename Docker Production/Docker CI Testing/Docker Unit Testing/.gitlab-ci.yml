@@ -1,0 +1,92 @@
+# GitLab CI/CD Pipeline for Docker-based Testing
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+services:
+  - docker:20.10.16-dind
+
+before_script:
+  - docker info
+  - docker-compose --version
+
+# Build stage
+build:
+  stage: build
+  script:
+    - echo "Building Docker images..."
+    - docker-compose build
+    - docker images
+  artifacts:
+    reports:
+      junit: test-results/*.xml
+    paths:
+      - test-results/
+    expire_in: 1 week
+
+# Test stage - Python
+test:python:
+  stage: test
+  script:
+    - echo "Running Python tests..."
+    - docker-compose run --rm python-tests
+    - echo "Python tests completed"
+  artifacts:
+    reports:
+      junit: test-results/python-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: test-results/python-coverage.xml
+    paths:
+      - test-results/
+    expire_in: 1 week
+  dependencies:
+    - build
+
+# Test stage - Node.js
+test:nodejs:
+  stage: test
+  script:
+    - echo "Running Node.js tests..."
+    - docker-compose run --rm nodejs-tests
+    - echo "Node.js tests completed"
+  artifacts:
+    reports:
+      junit: test-results/nodejs-results.xml
+    paths:
+      - test-results/
+    expire_in: 1 week
+  dependencies:
+    - build
+
+# Deploy stage
+deploy:staging:
+  stage: deploy
+  script:
+    - echo "Deploying to staging environment..."
+    - docker-compose up -d python-app nodejs-app
+    - sleep 15
+    - echo "Running health checks..."
+    - curl -f http://localhost:5000/health
+    - curl -f http://localhost:3000/health
+    - echo "Deployment successful"
+  environment:
+    name: staging
+    url: http://localhost:5000
+  dependencies:
+    - test:python
+    - test:nodejs
+  only:
+    - main
+    - master
+
+# Cleanup
+after_script:
+  - docker-compose down || true
+  - docker system prune -f || true

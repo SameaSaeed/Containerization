@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microservices Lab - Frontend</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .user-card {
+            background-color: #e9ecef;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Microservices Lab Frontend</h1>
+        <p>This frontend communicates with a backend API running in a separate container.</p>
+        
+        <div>
+            <button onclick="checkBackendHealth()">Check Backend Health</button>
+            <button onclick="fetchUsers()">Fetch All Users</button>
+            <button onclick="fetchUser(1)">Fetch User 1</button>
+        </div>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = window.location.protocol + '//' + window.location.hostname + ':3001';
+        
+        function displayResult(data, isError = false) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = isError ? 'result error' : 'result';
+            
+            if (typeof data === 'object') {
+                resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            } else {
+                resultDiv.innerHTML = data;
+            }
+        }
+        
+        async function checkBackendHealth() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/health`);
+                const data = await response.json();
+                displayResult(data);
+            } catch (error) {
+                displayResult(`Error connecting to backend: ${error.message}`, true);
+            }
+        }
+        
+        async function fetchUsers() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/users`);
+                const data = await response.json();
+                
+                let html = '<h3>All Users:</h3>';
+                data.users.forEach(user => {
+                    html += `<div class="user-card">
+                        <strong>${user.name}</strong><br>
+                        Email: ${user.email}<br>
+                        ID: ${user.id}
+                    </div>`;
+                });
+                
+                document.getElementById('result').innerHTML = html;
+            } catch (error) {
+                displayResult(`Error fetching users: ${error.message}`, true);
+            }
+        }
+        
+        async function fetchUser(id) {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/users/${id}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = `<h3>User Details:</h3>
+                        <div class="user-card">
+                            <strong>${data.user.name}</strong><br>
+                            Email: ${data.user.email}<br>
+                            ID: ${data.user.id}
+                        </div>`;
+                    document.getElementById('result').innerHTML = html;
+                } else {
+                    displayResult(data, true);
+                }
+            } catch (error) {
+                displayResult(`Error fetching user: ${error.message}`, true);
+            }
+        }
+    </script>
+</body>
+</html>

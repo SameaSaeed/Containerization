@@ -1,0 +1,8 @@
+{
+  "httpMethod": "GET",
+  "path": "/hello",
+  "queryStringParameters": {
+    "message": "Hello from AWS Lambda",
+    "source": "Docker Container"
+  }
+}

@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  python-tests:
+    build: 
+      context: ./python-app
+      dockerfile: Dockerfile
+    container_name: python-ci-tests
+    volumes:
+      - ./python-app:/app
+      - ./test-results:/test-results
+    environment:
+      - PYTHONPATH=/app/src
+    command: >
+      sh -c "python -m pytest tests/ -v --junitxml=/test-results/python-results.xml --cov=src --cov-report=xml:/test-results/python-coverage.xml"
+    networks:
+      - ci-network
+
+  nodejs-tests:
+    build:
+      context: ./nodejs-app
+      dockerfile: Dockerfile
+    container_name: nodejs-ci-tests
+    volumes:
+      - ./nodejs-app:/app
+      - ./test-results:/test-results
+    command: >
+      sh -c "npm test -- --testResultsProcessor=jest-junit --coverageReporters=cobertura --coverageDirectory=/test-results"
+    environment:
+      - JEST_JUNIT_OUTPUT_DIR=/test-results
+      - JEST_JUNIT_OUTPUT_NAME=nodejs-results.xml
+    networks:
+      - ci-network
+
+  python-app:
+    build: 
+      context: ./python-app
+      dockerfile: Dockerfile
+    container_name: python-ci-app
+    ports:
+      - "5000:5000"
+    command: python src/app.py
+    networks:
+      - ci-network
+    depends_on:
+      - python-tests
+
+  nodejs-app:
+    build:
+      context: ./nodejs-app
+      dockerfile: Dockerfile
+    container_name: nodejs-ci-app
+    ports:
+      - "3000:3000"
+    command: npm start
+    networks:
+      - ci-network
+    depends_on:
+      - nodejs-tests
+
+networks:
+  ci-network:
+    driver: bridge
+
+volumes:
+  test-results:

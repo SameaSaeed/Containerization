@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  database:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: apidb
+      POSTGRES_USER: apiuser
+      POSTGRES_PASSWORD: apipass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - api-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apiuser -d apidb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flask API Service
+  api:
+    build: .
+    container_name: flask-api
+    environment:
+      DB_HOST: database
+      DB_NAME: apidb
+      DB_USER: apiuser
+      DB_PASS: apipass
+      DB_PORT: 5432
+    ports:
+      - "5000:5000"
+    networks:
+      - api-network
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - ./app:/app
+    restart: unless-stopped
+
+networks:
+  api-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

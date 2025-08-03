@@ -1,0 +1,45 @@
+# Use specific version with digest for security
+FROM node:18-alpine@sha256:c7620fdecfefb96813da62519897808775230386f4c8482e972e37b8b18cb460
+
+# Install security updates
+RUN apk update && apk upgrade && \
+    apk add --no-cache dumb-init && \
+    rm -rf /var/cache/apk/*
+
+# Create non-root user with specific UID/GID
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files with proper ownership
+COPY --chown=nodejs:nodejs package*.json ./
+
+# Install dependencies and clean up
+RUN npm ci --only=production && \
+    npm cache clean --force && \
+    rm -rf /tmp/*
+
+# Copy application code
+COPY --chown=nodejs:nodejs server.js ./
+
+# Remove unnecessary packages and files
+RUN apk del --purge && \
+    rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+
+# Switch to non-root user
+USER nodejs
+
+# Use dumb-init as PID 1
+ENTRYPOINT ["dumb-init", "--"]
+
+# Expose port
+EXPOSE 3000
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+# Start application
+CMD ["node", "server.js"]

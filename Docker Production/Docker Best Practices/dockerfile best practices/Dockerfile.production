@@ -1,0 +1,79 @@
+# Multi-stage build for production-ready image
+# Stage 1: Build stage
+FROM node:18.17.0-alpine3.18 AS builder
+
+# Install build dependencies
+RUN apk update && \
+    apk add --no-cache \
+        python3 \
+        make \
+        g++ && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy package files for dependency installation
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies for building)
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Stage 2: Production stage
+FROM node:18.17.0-alpine3.18 AS production
+
+# Add metadata
+LABEL maintainer="devops@company.com" \
+      version="1.0.0" \
+      description="Production-ready Node.js application" \
+      org.opencontainers.image.source="https://github.com/company/app"
+
+# Install runtime dependencies and security updates
+RUN apk update && \
+    apk upgrade && \
+    apk add --no-cache \
+        dumb-init \
+        curl \
+        tini && \
+    rm -rf /var/cache/apk/* /tmp/*
+
+# Create non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -S appuser -u 1001 -G appgroup
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY --chown=appuser:appgroup package*.json ./
+
+# Install only production dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force && \
+    rm -rf /tmp/* /root/.npm
+
+# Copy application from builder stage
+COPY --from=builder --chown=appuser:appgroup /app/app.js ./
+
+# Set proper permissions
+RUN chmod 755 /app && \
+    find /app -type f -exec chmod 644 {} \;
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 3000
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Use tini for proper signal handling
+ENTRYPOINT ["tini", "--"]
+
+# Run application
+CMD ["node", "app.js"]
