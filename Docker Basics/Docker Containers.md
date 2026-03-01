@@ -1,7 +1,3 @@
-##### **Docker Containers**
-
-
-
 **Runnning Containers**
 
 docker run -d --name my-ubuntu-container ubuntu sleep 3600
