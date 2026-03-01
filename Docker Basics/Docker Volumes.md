@@ -1,5 +1,8 @@
 #### **Docker Volumes**
 
+<img width="528" height="191" alt="image" src="https://github.com/user-attachments/assets/15f839e3-72fa-4322-a29d-43bf933ac4c2" />
+
+
 
 
 **List volumes**
