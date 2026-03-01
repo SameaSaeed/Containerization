@@ -1,5 +1,7 @@
 ##### Docker Networks
 
+<img width="519" height="235" alt="image" src="https://github.com/user-attachments/assets/0d847978-ca2c-4c38-b455-b97295721173" />
+
 
 
 docker network ls
