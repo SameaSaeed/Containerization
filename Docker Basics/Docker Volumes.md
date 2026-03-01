@@ -117,7 +117,7 @@ docker volume create restored-volume
 
 
 
-\# Restore data to the new volume
+\# Restore data to the new volume (You don’t need -it for non-interactive commands like backups, because those run and exit automatically.)
 docker run --rm -v restored-volume:/data -v $(pwd):/backup ubuntu:20.04 \\
 &nbsp; bash -c "cd /data \&\& tar xzf /backup/volume-backup.tar.gz"
 
