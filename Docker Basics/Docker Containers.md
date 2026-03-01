@@ -50,6 +50,7 @@ docker exec -it --user root container-name /bin/bash : Run exec as root user
 
 
 **Inspecting containers**
+(Docker inspect is basically asking the container to hand over its autobiography—network, state, mounts, environment, everything)
 
 docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' my-ubuntu-container
 
