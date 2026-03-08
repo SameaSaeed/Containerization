@@ -7,6 +7,19 @@
 
 
 
+
+
+<img width="235" height="230" alt="container_filesystem" src="https://github.com/user-attachments/assets/32acbd95-b379-4414-ae82-18288353b856" />
+
+
+
+
+
+
+
+
+
+
 **List volumes**
 
 docker volume ls
